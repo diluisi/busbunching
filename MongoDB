@@ -1,0 +1,292 @@
+***************************
+MOSTRAR E USAR
+***************************
+
+#mostrar as db's disponíveis
+show dbs
+
+#usar uma db
+use db_name
+
+#mostrar em qual db está
+db 
+
+#mostrar collections
+show collections
+
+
+***************************
+CRIANDO USERS
+***************************
+
+#cria user com acesso total a todas as collections
+
+use admin
+db.addUser({user: "admin1", pwd: "1234", roles: ["userAdminAnyDatabase"]})
+
+#cria user com acesso apenas em uma collection
+
+show dbs
+use db_name
+db.addUser({user: "admin1", pwd: "1234", roles: ["readWrite", "dbAdmin"]})
+
+
+***************************
+CRIANDO DB
+***************************
+
+#A criação é automática, mas é necessário tb criar uma collection para que fique visível ao usar o comando <show dbs>, caso contrário ficará invisível
+
+use people
+db.createCollection("employees")
+show dbs
+
+
+***************************
+DELETAR DB
+***************************
+
+db.getCollection("people").drop()
+show collections
+
+
+***************************
+INSERINDO DADOS
+***************************
+
+#criando a estrutura e salvando em uma variável. O shell do mongo roda Java Script, por isso podemos fazer qqer operação
+
+sam = {
+	firstName: "Sam",
+	lastName: "Smith",
+	dept: "Sales",	
+	started: 1988
+      }
+
+#o dado está somente na memória, para salvar é preciso executar o seguinte comando
+#A diferença do Save para o Insert, é que se o dado já estiver no db, Save irá atualizar. Insert não atualizará, a não ser que vc especifique
+
+db.employees.save(sam)
+db.employees.insert(firstName: "Sam", lastName: "Smith",dept: "Sales",started: 1988)
+
+#Múltiplos inserts
+db.employees.insert([{firstName: "Sam", lastName: "Smith",dept: "Sales",started: 1988},{firstName: "Sam", lastName: "Smith",dept: "Sales",started: 1988}])
+
+
+***************************
+BUSCANDO VALORES	
+***************************
+
+db.employees.find()
+
+# Deixa visualmente os dados arrumados para leitura
+db.employees.find().pretty()
+
+# simulando o where
+db.employees.find({dept: "Sales"})
+
+db.employees.find({dept: "Sales", started: 2002})
+
+#para não ter que exibir todos os valores podemos usar o seguinte comando
+
+db.employees.find({}, {firstName:1,lastName:1, _id: 0})
+
+# procurando valores em arrays e sub-documentos
+
+# esta query busca exatamente estes valores. Se não houver usuários com os três então nada será exibido
+db.employees.find({skills: ["Internet Marketing", "SEO", "Advertising"]).pretty()
+
+#se quisermos que o user tenha pelo menos um dos skills devemos fazer diferente
+db.employees.find({skills: "Internet Marketing").pretty()
+
+#busca em sub-documentos
+db.employees.find({addresss: {street: "656 Isreal Ave", city: "Portsmouth", state: "NH"}).pretty()
+
+db.employees.find({"addresss.state": "MA"}).pretty()
+
+db.employees.find({"addresss.state": "MA"}).limit(3).pretty()
+***************************
+CRIANDO LOOPS	
+***************************
+
+#vamos usar um db de teste para calcular 50 valores com seus respectivos quadrados
+
+use test
+db.createCollection('squares')
+for(var i = 0; i < 50; i++){
+	db.squares.save({n: i, square: i * i})
+	}
+
+db.squares.find().pretty()
+
+
+***************************
+QUANTIFICADORES	
+***************************
+
+# greater than
+$gt
+
+# less than
+$lt
+
+# todos os documentos com o campo started menor que 2005
+db.employees.find({started: {$lt: 2005}}).pretty()
+
+# buscar valores num intervalo. Temos que usar o operador $or
+db.employees.find({
+		$or: [
+			{started: {$lt: 2000}},
+			{started: {$gte: 2010}}
+		     ] 	
+		}).pretty()
+
+
+db.employees.find({
+		$and: [
+			{started: {$lt: 2000}},
+			{dept: "Sales"}
+		     ] 	
+		}).pretty()
+
+***************************
+DATA AGGREGATION	
+***************************
+
+
+# Reshapes a document stream. It can rename, add, or remove fields as well as create computed values and sub-documents
+$project
+
+db.employees.aggregate({$project: {_id: 0, firstName: 1, lastName: 1}})
+db.employees.aggregate({$project: {firstName: 1, lastName: 1, "Started On": "$started"}})                   # renomeando o nome do campo
+
+db.employees.aggregate({$project: {location: {$concat: ["$address.city", " ", "address.state"]}}}})	    # cria o campo location e concatena dois valores em campos diferentes
+
+# Filters the document stream, and only allows matching documents to pass into the next pipeline stage. It uses standard MongoDB Queries. Funciona como o WHERE
+$match
+
+db.employees.aggregate({$match: {dept: "Sales"}})
+
+db.employees.aggregate([{$match: {started: {$gte: 2005, $lte: 2010}}},
+			{$group: {_id: null, count:{$sum:1}}}
+			])						# busca users que começaram entre 2005 e 2010. Agrupamos e somamos os users
+
+
+# Restricts the number of documents in an aggregation pipeline
+$limit
+
+db.employees.aggregate({$limit: 5})
+
+
+# Skips over a specified number of documents and returns them as a stream of documents
+$skip
+
+# Takes an array of documents and returns them as a stream of documents
+$unwind
+
+# Groups documents together for the purpose of calculating aggregate values based on a collection of documents. Every $group expression MUST specify an _id field, $group expression can include computed fields. These other fields must use one of the following accumulators: $addToSet, $first, $last, $max, $min, $avg, $push, $sum. TIP: Use $project as needed to rename the grouped field after a $group operation.
+$group
+
+db.article.aggregate({$group: {_id: "$author", docsPerAuthor: {sum: 1}, viewsPerAuthor: {$sum: "$pageViews"}}}  #docsPerAuthor is a counter incremeting by one and viewPerAuthor is a sum of all views
+
+db.employees.aggregate({$group: {_id: "$started", employees: {$push: "$firstName"}}})				#pega todos os users que começaram num determinado ano
+
+
+# Takes all input documents and returns them in a stream of sorted documents
+$sort
+
+db.users.aggregate({$sort: {age: -1, posts: 1}})			# -1 significa decrescente e 1 significa crescente
+
+
+# Returns an ordered stream of documents based on proximity to a geospatial point
+$geoNear
+
+
+***************************
+UPDATE AND DELETE DATA	
+***************************
+
+db.employees.update({firstName: "Lucas"},{$set: {dept: "Web Design"}})
+
+db.employees.update({firstName: "Lucas"},{$set: {dept: "Web Design"}, multi: true, upsert: true})		#multi serve para atualizar múltiplos valores ao msm tempo e upsert insere se o valor não existir
+
+# Remove o primeiro ou o último valor de um array
+
+$pop
+
+db.collection.update({field: value}, {$pop: {field: 1}})		#esta operação remove o primeiro item do array no campo especificado, se for -1 é o último
+
+# Pull removes items from an array that match a query statement
+
+$pull
+
+# removendo um campo
+
+db.employees.update({firstName: "Lucas"},{$unset: {started: ""}})
+
+# removendo um documento
+
+db.employees.remove()
+db.employees.remove({firstName: "Lucas"})
+
+#removendo um db
+db.dropDatabase()
+
+
+***************************
+IMPORTING & EXPORTING
+***************************
+
+mongoexport -d people -c employees -o employees.json
+
+mongoimport -d people -c employees employees.json
+
+#mais indicado do que export
+mongodump --db people
+
+mongorestore
+
+***************************
+MONGOLAB CLOUD DATABASE
+***************************
+
+To verify the status of the service, type:
+
+    sudo systemctl status mongodb
+
+You can stop the server anytime by typing:
+
+    sudo systemctl stop mongodb
+
+To start the server when it is stopped, type:
+
+    sudo systemctl start mongodb
+
+You can also restart the server with a single command:
+
+    sudo systemctl restart mongodb
+
+By default, MongoDB is configured to start automatically with the server. If you wish to disable the automatic startup, type:
+
+    sudo systemctl disable mongodb
+
+It's just as easy to enable it again. To do this, use:
+
+    sudo systemctl enable mongodb
+
+
+***************************
+JAVA SCRIPT
+***************************
+
+#verificar que está no mesmo diretório onde o arquivo se encontra
+load('filename.js')
+
+
+
+
+
+
+
+
+
